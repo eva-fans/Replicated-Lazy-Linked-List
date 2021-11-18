@@ -4,7 +4,10 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <memory.h>
+#include <unistd.h>
 
+#define BACKUP_SERVER_IP ("127.0.0.1")
+#define BACKUP_SERVER_PORT 8081
 #define PRIMARY_SERVER_PORT 8080
 #define PACKET_SOURCE_SERVER 1
 #define PACKET_SOURCE_CLIENT 2
@@ -34,39 +37,56 @@ int main(void)
 {
     
     int sockPri;
-    int sockBcu;
+    int sockBck;
     intset_l_t *set=set_new_l();
-    if((sockPri=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP))<0 || (sockBcu=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP))<0)
+    if((sockPri=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP))<0 || (sockBck=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP))<0)
     {
+        printf("socket function fails\n");
         return 1;
     }
-    struct sockaddr_in addr={0};
+    struct sockaddr_in addr;
+    memset(&addr,0,sizeof(struct sockaddr_in));
+    addr.sin_addr.s_addr=inet_addr(BACKUP_SERVER_IP);
+    addr.sin_family=AF_INET;
+    addr.sin_port=htons(BACKUP_SERVER_PORT);
+    if(connect(sockBck,(struct sockaddr*)&addr,sizeof(struct sockaddr_in))<0)
+    {
+        close(sockPri);
+        close(sockBck);
+        printf("connecting to backup server fails\n");
+        return 1;
+    }
+    memset(&addr,0,sizeof(struct sockaddr_in));
     addr.sin_addr.s_addr=INADDR_ANY;
     addr.sin_family=AF_INET;
     addr.sin_port=htons(PRIMARY_SERVER_PORT);
-    if(bind(sockPri,(struct sockaddr*)&addr,sizeof(struct sockaddr_in)))
+    if(bind(sockPri,(struct sockaddr*)&addr,sizeof(struct sockaddr_in))<0)
     {
         close(sockPri);
+        printf("bind socket to localhost fails\n");
         return 1;
     }
     if(listen(sockPri,5)<0)
     {
         close(sockPri);
+        printf("listen to the port fails\n");
         return 1;
     }
     memset(&addr,0,sizeof(struct sockaddr_in));
     socklen_t socklen=sizeof(struct sockaddr_in);   
-    if(accept(sockPri, (struct sockaddr_in*)&addr,&socklen)<0)
+    if(accept(sockPri, (struct sockaddr*)&addr,&socklen)<0)
     {
         close(sockPri);
         set_delete_l(set);
+        printf("accepting client's connection fails\n");
         return 1;
     }
     packet_t packet;
     ssize_t size;
     do
     {
-        size=get_packet(sockPri, (struct sockaddr*)&addr, sizeof(struct sockaddr_in), &packet);
+        socklen_t socklen=sizeof(struct sockaddr_in);
+        size=get_packet(sockPri, (struct sockaddr*)&addr, &socklen, &packet);
         switch(packet.operation)
         {
             case PACKET_OPERATION_REMOVE:

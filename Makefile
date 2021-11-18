@@ -1,20 +1,20 @@
 ROOT = .
-TARGET  = test
+TARGET  = PrimaryServer
 BUILDIR = $(ROOT)/build
 BINS = $(ROOT)/$(TARGET)
 SRC = src
 INCLUDE = include
 DEBUG = Y
 
-CFLAGS += -std=gnu89
+CFLAGS += -std=gnu89 -Wall
 ifdef DEBUG
 	CFLAGS += -g
 endif
 
 .PHONY:	clean
 
-$(TARGET): linkedlist-lock.o coupling.o lazy.o intset.o test.o
-	$(CC) $(CFLAGS) $(BUILDIR)/linkedlist-lock.o $(BUILDIR)/lazy.o $(BUILDIR)/coupling.o $(BUILDIR)/intset.o $(BUILDIR)/test.o -lpthread -o $(BINS) $(LDFLAGS)
+$(TARGET): linkedlist-lock.o coupling.o lazy.o intset.o PrimaryServer.o
+	$(CC) $(CFLAGS) $(BUILDIR)/linkedlist-lock.o $(BUILDIR)/lazy.o $(BUILDIR)/coupling.o $(BUILDIR)/intset.o $(BUILDIR)/PrimaryServer.o -lpthread -o $(BINS) $(LDFLAGS)
 
 linkedlist-lock.o: $(INCLUDE)/linkedlist-lock.h $(SRC)/linkedlist-lock.c
 	$(CC) $(CFLAGS) -c -o $(BUILDIR)/linkedlist-lock.o $(SRC)/linkedlist-lock.c -I$(INCLUDE)
@@ -28,8 +28,8 @@ coupling.o: $(INCLUDE)/coupling.h $(SRC)/coupling.c
 intset.o: $(INCLUDE)/linkedlist-lock.h $(INCLUDE)/coupling.h $(INCLUDE)/lazy.h
 	$(CC) $(CFLAGS) -c -o $(BUILDIR)/intset.o $(SRC)/intset.c -I$(INCLUDE)
 
-test.o: $(INCLUDE)/linkedlist-lock.h $(INCLUDE)/coupling.h $(INCLUDE)/lazy.h $(INCLUDE)/intset.h
-	$(CC) $(CFLAGS) -c -o $(BUILDIR)/test.o $(SRC)/test.c -I$(INCLUDE)
+PrimaryServer.o: $(INCLUDE)/linkedlist-lock.h $(INCLUDE)/coupling.h $(INCLUDE)/lazy.h $(INCLUDE)/intset.h
+	$(CC) $(CFLAGS) -c -o $(BUILDIR)/PrimaryServer.o $(SRC)/PrimaryServer.c -I$(INCLUDE)
 
 clean:
-	rm -f $(BINS)
+	rm -rf $(BINS) $(BUILDIR)/*
