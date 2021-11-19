@@ -8,17 +8,18 @@
 #include <pthread.h>
 
 intset_l_t *set;
+pthread_mutex_t mutex;
 
 void* client_thread(void* arg);
 
 int main()
 {
-    int sockBck;
-    int sockPri;
+    int sockBck, sockPri;
     struct sockaddr_in addr;
     socklen_t socklen;
     pthread_t pthread;
     set=set_new_l();
+    pthread_mutex_init(&mutex,NULL);
     if(pthread_create(&pthread,NULL,client_thread,NULL))
     {
         printf("client thread create fails");
@@ -29,6 +30,7 @@ int main()
     {
         return 1;
     }
+
     memset(&addr,0,sizeof(struct sockaddr_in));
     addr.sin_addr.s_addr=INADDR_ANY;
     addr.sin_family=AF_INET;
@@ -38,11 +40,13 @@ int main()
         close(sockBck);
         return 1;
     }
+
     if(listen(sockBck,5)<0)
     {
         close(sockBck);
         return 1;
     }
+
     memset(&addr,0,sizeof(struct sockaddr_in));
     socklen=sizeof(struct sockaddr_in);
     if((sockPri=accept(sockBck,(struct sockaddr*)&addr,&socklen))<0)
@@ -50,25 +54,35 @@ int main()
         close(sockBck);
         return 1;
     }
+
     packet_t request;
     packet_t response;
     ssize_t size;
+
+    request.operation=PACKET_OPERATION_RECOVER;
+    send(sockPri,&request,sizeof(packet_t),0); // send backup server recover request
+
     do
     {
         memset(&request,0,sizeof(packet_t));
         memset(&response,0,sizeof(packet_t));
         socklen=sizeof(struct sockaddr_in);
-        size=get_packet(sockPri, &request);
+        size=recv(sockPri,&request,sizeof(packet_t),0);
         switch(request.operation)
         {
             case PACKET_OPERATION_INSERT:
                 set_add_l(set,request.val,0);
-                break;
-            case PACKET_OPERATION_LOOKUP:
-                set_contains_l(set,request.val,0);
+                printf("insert %ld\n",request.val);
                 break;
             case PACKET_OPERATION_REMOVE:
                 set_remove_l(set,request.val,0);
+                printf("remove %ld\n",request.val);
+                break;
+            case PACKET_OPERATION_RECOVER:
+                pthread_mutex_lock(&mutex);
+                set_delete_l(set);
+                set=set_new_l();
+                pthread_mutex_unlock(&mutex);
                 break;
             case PACKET_OPERATION_TERMINATE:
                 // do nothing
@@ -77,7 +91,6 @@ int main()
                 response.error=1;
                 break;
         }
-        size = send(sockPri,&response,sizeof(packet_t),0);
     } while (request.operation!=PACKET_OPERATION_TERMINATE && size>0);
 
     close(sockPri);
@@ -96,6 +109,7 @@ void* client_thread(void* arg)
     {
         return 0;
     }
+
     memset(&addr,0,sizeof(struct sockaddr_in));
     addr.sin_addr.s_addr=INADDR_ANY;
     addr.sin_family=AF_INET;
@@ -110,6 +124,7 @@ void* client_thread(void* arg)
         close(sockBck);
         return 0;
     }
+
     memset(&addr,0,sizeof(struct sockaddr_in));
     socklen=sizeof(struct sockaddr_in);
     if((sockClt=accept(sockBck,(struct sockaddr*)&addr,&socklen))<0)
@@ -121,23 +136,29 @@ void* client_thread(void* arg)
     packet_t request;
     packet_t response;
     ssize_t size;
+
     do
     {
         memset(&request,0,sizeof(packet_t));
         memset(&response,0,sizeof(packet_t));
         socklen=sizeof(struct sockaddr_in);
-        size=get_packet(sockClt, &request);
+        size=recv(sockClt,&request,sizeof(packet_t),0);
         switch(request.operation)
         {
             case PACKET_OPERATION_LOOKUP:
-                set_contains_l(set,request.val,0);
+                response.val=request.val;
+                pthread_mutex_lock(&mutex);
+                response.persistence=set_contains_l(set,request.val,0);
+                pthread_mutex_unlock(&mutex);
+                printf("lookup %ld\n",request.val);
                 break;
             default:
                 response.error=1;
                 break;
         }
         size = send(sockClt,&response,sizeof(packet_t),0);
-    } while (size>0);   
+    } while (size>0);
+
     close(sockBck);
     close(sockClt);
     return 0;

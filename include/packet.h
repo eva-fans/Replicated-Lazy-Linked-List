@@ -1,3 +1,6 @@
+#ifndef _PACKET_H
+#define _PACKET_H
+
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include "intset.h"
@@ -29,4 +32,4 @@ typedef struct _packet
 } packet_t;
 #pragma pack()
 
-ssize_t get_packet(int IN sock, packet_t OUT *packet);
+#endif // _PACKET_H
