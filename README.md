@@ -1,6 +1,8 @@
 This is a distribution sample. Lazy list code is from https://github.com/gramoli/synchrobench, thanks for synchrobench.
 I only write BackupServer.c, PrimaryServer.c and Client.c for the project.
 
+Please do not delete log file
+
 Compile:
     make
 

@@ -11,30 +11,32 @@
 
 int main(void)
 {
-    int sockPri, sockBck, sockClt;
-    packet_t request;
-    packet_t response;
-    ssize_t size;
+    int sockPri, sockBck, sockClt; // Primary server socket, backup server socket, client socket
+    packet_t request; // the request sent to primary server from client
+    packet_t response; // the response which primary server send to client
+    ssize_t size; // the size of network packet
 
-    intset_l_t *set=set_new_l();
-    FILE *log=fopen("log","r+");
-    if(log==NULL)
+    intset_l_t *set=set_new_l(); // relicated linked list
+    FILE *log=fopen("log","r+"); // open the log file
+    if(log==NULL) // cant open log file
     {
-        printf("open log file fails\n");
+        printf("open log file fails\n"); 
         return 1;
     }
     
+    // create primary server socket and backup server socket
     if((sockPri=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP))<0 || (sockBck=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP))<0)
     {
         fclose(log);
         printf("socket function fails\n");
         return 1;
     }
-    struct sockaddr_in addr;
+    struct sockaddr_in addr; // the address backup server
     memset(&addr,0,sizeof(struct sockaddr_in));
     addr.sin_addr.s_addr=inet_addr(BACKUP_SERVER_IP);
     addr.sin_family=AF_INET;
     addr.sin_port=htons(BACKUP_SERVER_PORT);
+    // connect to backup server first
     if(connect(sockBck,(struct sockaddr*)&addr,sizeof(struct sockaddr_in))<0)
     {
         close(sockPri);
@@ -46,13 +48,14 @@ int main(void)
 
     do
     {
-        char operation[100];
-        val_t val;
-        packet_t req;
-        req.operation=PACKET_OPERATION_RECOVER;
+        char operation[100]; // the operation that is read from log
+        val_t val; // operation number
+        packet_t req; // the request sent to backup server
+        // ask backup server recover
+        req.operation=PACKET_OPERATION_RECOVER; 
         size=send(sockBck,&req,sizeof(packet_t),0);
         fscanf(log,"%s %ld\n",operation,&val);
-        if(strcmp(operation,"insert")==0)
+        if(strcmp(operation,"insert")==0) // insert
         {
             set_add_l(set,val,0);
             req.operation=PACKET_OPERATION_INSERT;
@@ -60,7 +63,7 @@ int main(void)
             printf("insert %ld\n",val);
             size=send(sockBck,&req,sizeof(packet_t),0);
         }
-        else if(strcmp(operation,"remove")==0)
+        else if(strcmp(operation,"remove")==0) // remove
         {
             set_remove_l(set,val,0);
             req.operation=PACKET_OPERATION_REMOVE;
@@ -70,6 +73,7 @@ int main(void)
         }
     } while (!feof(log) && size>0);
 
+    // listen at PRIMARY_SERVER_PORT
     memset(&addr,0,sizeof(struct sockaddr_in));
     addr.sin_addr.s_addr=INADDR_ANY;
     addr.sin_family=AF_INET;
@@ -88,8 +92,10 @@ int main(void)
         printf("listen to the port fails\n");
         return 1;
     }
+
+    // accept a client
     memset(&addr,0,sizeof(struct sockaddr_in));
-    socklen_t socklen=sizeof(struct sockaddr_in);   
+    socklen_t socklen=sizeof(struct sockaddr_in);
     if((sockClt=accept(sockPri, (struct sockaddr*)&addr,&socklen))<0)
     {
         close(sockPri);
@@ -98,12 +104,15 @@ int main(void)
         return 1;
     }
 
+    // set backup socket to nonblock mode
     int flags=fcntl(sockBck,F_GETFL,0);
     fcntl(sockBck,F_SETFL,flags | O_NONBLOCK);
     do
     {
+        // detect whether backup server crash
         memset(&request,0,sizeof(packet_t));
         size=recv(sockBck,&request,sizeof(packet_t),0);
+        // if backup server crash
         if(size>0 && request.operation==PACKET_OPERATION_RECOVER)
         {
             fseek(log,SEEK_SET,0);
@@ -132,13 +141,16 @@ int main(void)
             } while (!feof(log) && size>0);
         }
 
+        // receive client's request
         memset(&request,0,sizeof(packet_t));
         memset(&response,0,sizeof(packet_t));
         size=recv(sockClt,&request,sizeof(packet_t),0);
         if(request.operation!=PACKET_OPERATION_LOOKUP)
         {
-            size=send(sockBck,&request,sizeof(packet_t),0);
+            size=send(sockBck,&request,sizeof(packet_t),0); // send the request from the client to the backup server
         }
+
+        // handle request from the client
         switch(request.operation)
         {
             case PACKET_OPERATION_REMOVE:
